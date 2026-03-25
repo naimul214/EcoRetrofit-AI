@@ -1,0 +1,7 @@
+torch
+pandas
+numpy
+scikit-learn
+joblib
+stable-baselines3[extra]
+gymnasium==0.29.1

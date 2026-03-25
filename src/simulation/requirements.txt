@@ -1,0 +1,2 @@
+sinergym==3.4.0
+gymnasium
