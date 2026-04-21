@@ -4,6 +4,7 @@ services:
   influxdb:
     image: influxdb:2.7
     container_name: ecoretrofit-influxdb
+    restart: unless-stopped
     ports:
       - "8086:8086"
     volumes:
@@ -17,6 +18,24 @@ services:
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN}
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ecoretrofit-edge:
+    image: ecoretrofit-edge:local
+    container_name: ecoretrofit-edge
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    volumes:
+      - ./models:/app/models:ro
 
 volumes:
   influxdb2-data:
