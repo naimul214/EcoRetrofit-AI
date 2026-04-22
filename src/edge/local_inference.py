@@ -7,9 +7,17 @@ import httpx
 import numpy as np
 import onnxruntime as ort
 from typing import Dict, Tuple
+from dotenv import load_dotenv
 from bacpypes3.apdu import AbortPDU
 from database import TelemetryDB
 from bacnet_translator import BACnetBridge
+
+# Load .env BEFORE any os.environ.get() calls below.
+# On the Pi this reads ~/EcoRetrofit-AI/src/edge/.env with the hotspot IPs.
+# Inside Docker, the file won't exist (.dockerignore) and this is a no-op.
+_env_path = os.path.join(os.path.dirname(__file__), '.env')
+if os.path.exists(_env_path):
+    load_dotenv(dotenv_path=_env_path, override=False)
 
 # ---------------------------------------------------------------------------
 # Action mapping: exact values from Sinergym DEFAULT_5ZONE_DISCRETE_FUNCTION
