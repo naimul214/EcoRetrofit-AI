@@ -10,20 +10,38 @@ from simulation.noise_wrapper import SensorNoiseWrapper
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-def make_env():
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+DEFAULT_MODEL_RELATIVE = os.path.join('models', 'weights', 'ppo_discrete_ecoretrofit_5M.zip')
+VEC_NORM_RELATIVE = os.path.join('models', 'weights', 'vec_normalize_discrete.pkl')
+
+
+def make_env() -> gym.Env:
     env = gym.make('Eplus-5zone-cool-discrete-v1')
     env = SensorNoiseWrapper(env)
     return env
 
-def main():
+
+def resolve_model_path(base_dir: str) -> str:
+    model_override = os.environ.get('EVAL_MODEL_PATH', '').strip()
+    if model_override:
+        if os.path.isabs(model_override):
+            return model_override
+        return os.path.join(base_dir, model_override)
+    return os.path.join(base_dir, DEFAULT_MODEL_RELATIVE)
+
+
+def main() -> None:
     print("==================================================")
     print("Initializing Stable Baselines 3 PPO Evaluation Pipeline")
     print("==================================================")
-    
-    # Paths natively bound
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-    vec_norm_path = os.path.join(base_dir, 'models/weights/vec_normalize_discrete.pkl')
-    model_path = os.path.join(base_dir, 'models/weights/checkpoints/ppo_discrete_3000000_steps.zip')
+
+    vec_norm_path = os.path.join(PROJECT_ROOT, VEC_NORM_RELATIVE)
+    model_path = resolve_model_path(PROJECT_ROOT)
+
+    if not os.path.exists(vec_norm_path):
+        raise FileNotFoundError(f"VecNormalize statistics not found at: {vec_norm_path}")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Evaluation model not found at: {model_path}")
     
     # 1. Environment Instantiation Native Sequence
     print("[*] Booting Sinergym Subprocess via Eplus-5zone-cool-discrete-v1...")

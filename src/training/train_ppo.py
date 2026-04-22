@@ -11,12 +11,18 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import CheckpointCallback
 
-def make_env():
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+WEIGHTS_DIR = os.path.join(PROJECT_ROOT, 'models', 'weights')
+CHECKPOINTS_DIR = os.path.join(WEIGHTS_DIR, 'checkpoints')
+
+
+def make_env() -> gym.Env:
     env = gym.make('Eplus-5zone-cool-discrete-v1')
     env = SensorNoiseWrapper(env)
     return env
 
-def main():
+
+def main() -> None:
     print("==================================================")
     print("Initializing Stable Baselines 3 PPO Training Pipeline")
     print("==================================================")
@@ -30,10 +36,13 @@ def main():
     # Instantiate the PPO model
     model = PPO('MlpPolicy', env, verbose=1, learning_rate=3e-4, clip_range=0.2)
     
-    # Checkpoint Callback tracking bounds safely
+    os.makedirs(WEIGHTS_DIR, exist_ok=True)
+    os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
+
+    # Checkpoint callback writes directly to the repository weights folder.
     checkpoint_callback = CheckpointCallback(
-        save_freq=1000000, 
-        save_path='/app/models/weights/checkpoints/', 
+        save_freq=1000000,
+        save_path=CHECKPOINTS_DIR,
         name_prefix='ppo_discrete'
     )
     
@@ -41,16 +50,11 @@ def main():
     print("\n[*] Commencing 5,000,000 Step PPO Learn Epochs natively mapped...")
     model.learn(total_timesteps=5000000, callback=checkpoint_callback, progress_bar=True)
     
-    # Ensure models/weights directory exists
-    output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../models/weights'))
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Save the deep scaled model explicitly iteratively
-    model_path = os.path.join(output_dir, 'ppo_discrete_ecoretrofit_5M')
+    # Save final model and VecNormalize statistics beside checkpoints.
+    model_path = os.path.join(WEIGHTS_DIR, 'ppo_discrete_ecoretrofit_5M')
     model.save(model_path)
-    
-    # CRITICAL: Also save the environment's normalization statistics
-    vec_norm_path = os.path.join(output_dir, 'vec_normalize_discrete.pkl')
+
+    vec_norm_path = os.path.join(WEIGHTS_DIR, 'vec_normalize_discrete.pkl')
     env.save(vec_norm_path)
     
     print(f"\n[*] PPO Model securely saved internally to {model_path}.zip")

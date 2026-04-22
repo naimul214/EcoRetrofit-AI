@@ -117,7 +117,7 @@ EcoRetrofit-AI/
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Python | 3.11+ | Backend + Edge |
-| Node.js | 18+ | Frontend dashboard |
+| Node.js | 20.9+ | Frontend dashboard |
 | Docker | 24+ | InfluxDB + edge container |
 
 ### 1. Clone the Repository
@@ -131,7 +131,13 @@ cd EcoRetrofit-AI
 
 ```bash
 cd src/edge
+
+# Linux/Mac
 cp .env.example .env
+
+# Windows PowerShell
+Copy-Item .env.example .env
+
 # Edit .env with your credentials, then:
 docker compose up -d influxdb
 ```
@@ -153,7 +159,12 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # Copy and configure environment
+
+# Linux/Mac
 cp .env.example .env
+
+# Windows PowerShell
+Copy-Item .env.example .env
 
 # Start the backend
 python main.py
@@ -167,6 +178,13 @@ The backend will be running at `http://localhost:8010`.
 cd src/web/frontend
 
 npm install
+
+# Linux/Mac
+cp .env.example .env.local
+
+# Windows PowerShell
+Copy-Item .env.example .env.local
+
 npm run dev
 ```
 
@@ -252,11 +270,15 @@ python -u local_inference.py
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `GET` | `/api/health` | Service health and version |
 | `GET` | `/api/environment` | Current temps + AI reasoning text |
 | `POST` | `/api/environment` | Update simulated indoor/outdoor temps |
 | `GET` | `/api/telemetry/latest` | Last hour of HVAC control data from InfluxDB |
+| `GET` | `/api/telemetry/point/latest` | Latest structured telemetry point |
+| `GET` | `/api/telemetry/window` | Windowed telemetry query |
 | `GET` | `/api/energy/project` | Projected energy consumption (kWh) |
 | `GET` | `/api/savings_summary` | Real-time energy and cost savings |
+| `GET` | `/api/savings/summary` | Detailed TOU savings summary |
 | `GET` | `/api/override` | Current manual override status |
 | `POST` | `/api/override` | Toggle AI/manual BACnet control |
 
@@ -279,6 +301,17 @@ python eval_ppo.py
 # Export to ONNX for edge deployment
 python export_onnx.py
 ```
+
+Default training artifacts are saved to:
+
+- `models/weights/ppo_discrete_ecoretrofit_5M.zip`
+- `models/weights/vec_normalize_discrete.pkl`
+- `models/weights/checkpoints/`
+
+Optional overrides:
+
+- `EVAL_MODEL_PATH=<path-to-model.zip>` for `eval_ppo.py`
+- `PPO_MODEL_PATH=<path-to-model.zip>` for `export_onnx.py`
 
 The trained model uses a 17-dimensional observation space and a discrete action space with 10 heating/cooling setpoint combinations derived from Sinergym's `DEFAULT_5ZONE_DISCRETE_FUNCTION`.
 

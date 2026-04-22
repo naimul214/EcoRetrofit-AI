@@ -1,6 +1,6 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Literal
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 TouPeriod = Literal["off_peak", "mid_peak", "on_peak"]
 
@@ -18,7 +18,10 @@ class TouPricingService:
         self._off_peak = off_peak_cad_per_kwh
         self._mid_peak = mid_peak_cad_per_kwh
         self._on_peak = on_peak_cad_per_kwh
-        self._timezone = ZoneInfo(timezone_name)
+        try:
+            self._timezone = ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError:
+            self._timezone = timezone.utc
 
     @staticmethod
     def _is_summer(day: date) -> bool:

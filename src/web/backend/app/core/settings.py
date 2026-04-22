@@ -20,14 +20,17 @@ class Settings(BaseSettings):
 
     app_name: str = "EcoRetrofit Backend API"
     app_version: str = "0.1.0"
-    api_prefix: str = "/api/v1"
+    api_prefix: str = "/api"
 
     influx_url: str = Field(default="http://localhost:8086", validation_alias="INFLUXDB_URL")
-    influx_token: str = Field(default="super_secret_dev_token_123", validation_alias="INFLUXDB_ADMIN_TOKEN")
+    influx_token: str = Field(default="", validation_alias="INFLUXDB_ADMIN_TOKEN")
     influx_org: str = Field(default="ecoretrofit", validation_alias="INFLUXDB_ORG")
     influx_bucket: str = Field(default="ecoretrofit_telemetry", validation_alias="INFLUXDB_BUCKET")
 
-    cors_origins: list[str] = Field(default_factory=lambda: ["*"], validation_alias="CORS_ORIGINS")
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
+        validation_alias="CORS_ORIGINS",
+    )
 
     # Ontario TOU electricity rates in CAD/kWh.
     tou_off_peak_cad_per_kwh: float = Field(default=0.087, validation_alias="TOU_OFF_PEAK_CAD_PER_KWH")

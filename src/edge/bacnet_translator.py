@@ -29,6 +29,7 @@ class BACnetBridge:
         device_address: str,
         object_identifier: str,
         value: float,
+        timeout_seconds: float = 5.0,
     ) -> None:
         """
         Send a BACnet WritePropertyRequest to update an Analog Value object.
@@ -42,11 +43,14 @@ class BACnetBridge:
         print(f"[BACNET] Transmitting Write Request: {value}")
 
         obj_id = ObjectIdentifier(object_identifier)
-        await self.app.write_property(
-            Address(device_address),
-            obj_id,
-            "presentValue",
-            Real(value),
+        await asyncio.wait_for(
+            self.app.write_property(
+                Address(device_address),
+                obj_id,
+                "presentValue",
+                Real(value),
+            ),
+            timeout=timeout_seconds,
         )
         print("[BACNET] Write Request Successful.")
 

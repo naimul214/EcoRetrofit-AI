@@ -1,12 +1,12 @@
 # EcoRetrofit FastAPI Backend
 
-Task 5.1 backend initialization for telemetry analytics and estimated cost savings.
+Unified backend API for edge control, telemetry, and savings analytics.
 
 ## Features
-- FastAPI app scaffold under `app/` with modular services.
-- InfluxDB telemetry query endpoints for `hvac_control` measurement.
-- Ontario TOU rate period mapping for cost calculation.
-- Estimated CAD savings summary endpoint using a configurable proxy energy model.
+- Single canonical API contract under `/api`.
+- Live simulator environment + manual override endpoints for edge integration.
+- InfluxDB telemetry endpoints for both dashboard feed and analytical windows.
+- Ontario TOU pricing and estimated savings analytics.
 
 ## Quick Start
 1. Create a virtual environment and activate it.
@@ -20,12 +20,25 @@ pip install -r requirements.txt
 4. Start the API:
 
 ```bash
+python main.py
+```
+
+Alternative launcher:
+
+```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8010
 ```
 
 ## Endpoints
 - `GET /` root status.
-- `GET /api/v1/health` service health.
-- `GET /api/v1/telemetry/latest` latest telemetry point.
-- `GET /api/v1/telemetry/window` telemetry list for a time window.
-- `GET /api/v1/savings/summary` estimated TOU savings for a window.
+- `GET /api/health` service health.
+- `GET /api/environment` current indoor/outdoor environment with AI reasoning.
+- `POST /api/environment` update indoor/outdoor simulator overlay.
+- `GET /api/override` current manual override state.
+- `POST /api/override` toggle manual override state.
+- `GET /api/telemetry/latest` dashboard feed (last hour list with setpoints + latency).
+- `GET /api/telemetry/window` analytical telemetry window.
+- `GET /api/telemetry/point/latest` latest structured telemetry sample.
+- `GET /api/energy/project` projected energy estimate.
+- `GET /api/savings_summary` simple real-time savings summary.
+- `GET /api/savings/summary` detailed TOU savings summary.
