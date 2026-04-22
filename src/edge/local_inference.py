@@ -99,8 +99,8 @@ def build_observation(indoor_temp: float, outdoor_temp: float) -> np.ndarray:
 
 async def run_inference_loop(db: TelemetryDB) -> None:
     bridge: BACnetBridge = BACnetBridge()
-    dummy_device: str = "192.168.5.24"
-    object_identifier: str = "analogValue:1"
+    bacnet_device: str = os.environ.get("BACNET_DEVICE_ADDR", "192.168.5.24")
+    object_identifier: str = os.environ.get("BACNET_OBJECT_ID", "analogValue:1")
 
     # Pre-initialize BACnet application binding before entering the loop
     # to avoid a ~200ms penalty on the first write cycle.
@@ -178,7 +178,7 @@ async def run_inference_loop(db: TelemetryDB) -> None:
                 try:
                     print("[BACNET] Bridging parameters to physical hardware...")
                     await bridge.write_setpoint(
-                        device_address=dummy_device,
+                        device_address=bacnet_device,
                         object_identifier=object_identifier,
                         value=heating_setpoint,
                     )

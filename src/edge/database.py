@@ -6,8 +6,12 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 class TelemetryDB:
     def __init__(self) -> None:
+        # Load .env from disk only if it exists (native Pi run).
+        # Inside Docker, env vars are injected via --env-file and this is skipped.
+        # override=False ensures Docker-injected vars always take precedence.
         env_path = os.path.join(os.path.dirname(__file__), '.env')
-        load_dotenv(dotenv_path=env_path)
+        if os.path.exists(env_path):
+            load_dotenv(dotenv_path=env_path, override=False)
 
         self.url: str = os.environ.get("INFLUXDB_URL", "")
         self.token: str = os.environ.get("INFLUXDB_ADMIN_TOKEN", "")
