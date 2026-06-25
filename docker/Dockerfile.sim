@@ -45,3 +45,18 @@ RUN pip install "sinergym==3.4.0"
 
 # Apply setuptools fix to resolve missing pkg_resources from Sinergym
 RUN pip install "setuptools<70.0.0"
+
+# Set up working directory
+WORKDIR /app
+
+# Copy requirements lock and install dependencies
+COPY docker/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Copy application source code
+COPY . /app
+
+# Set Python Path and default entrypoint
+ENV PYTHONPATH="/app/src:${PYTHONPATH}"
+CMD ["python", "src/simulation/rbc_agent.py"]
+

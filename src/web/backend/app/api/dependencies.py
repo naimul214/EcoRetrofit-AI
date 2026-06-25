@@ -3,7 +3,14 @@ from functools import lru_cache
 from app.core.settings import get_settings
 from app.services.influx_service import InfluxTelemetryService
 from app.services.savings_service import EnergyModelConfig, SavingsService
+from app.services.state_service import StateService
 from app.services.tou_pricing import TouPricingService
+
+
+@lru_cache
+def get_state_service() -> StateService:
+    settings = get_settings()
+    return StateService(db_path=settings.resolved_state_db_path)
 
 
 @lru_cache

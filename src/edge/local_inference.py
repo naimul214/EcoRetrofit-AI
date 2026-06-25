@@ -1,28 +1,58 @@
+"""
+Local edge inference loop running ONNX policies for commercial building climate optimization.
+Communicates with BACnet physical controllers and publishes telemetry to InfluxDB.
+"""
+
 import os
+import sys
 import asyncio
 import datetime
+import logging
 import signal
 import time
+from pathlib import Path
+from typing import Dict, Tuple, Any
 import httpx
 import numpy as np
 import onnxruntime as ort
-from typing import Dict, Tuple
 from dotenv import load_dotenv
 from bacpypes3.apdu import AbortPDU
 from database import TelemetryDB
 from bacnet_translator import BACnetBridge
 
-# Load .env BEFORE any os.environ.get() calls below.
-# On the Pi this reads ~/EcoRetrofit-AI/src/edge/.env with the hotspot IPs.
-# Inside Docker, the file won't exist (.dockerignore) and this is a no-op.
-_env_path = os.path.join(os.path.dirname(__file__), '.env')
-if os.path.exists(_env_path):
-    load_dotenv(dotenv_path=_env_path, override=False)
+# Resolve project root and ensure it is in sys.path
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-# ---------------------------------------------------------------------------
+# Load .env BEFORE any os.environ.get() calls below.
+_env_path: Path = Path(__file__).resolve().parent / '.env'
+if _env_path.exists():
+    load_dotenv(dotenv_path=str(_env_path), override=False)
+
+logger: logging.Logger = logging.getLogger("EdgeInference")
+
+
+class StructuredFormatter(logging.Formatter):
+    """Custom formatter appending context extras to the log string."""
+    def format(self, record: logging.LogRecord) -> str:
+        msg: str = super().format(record)
+        # Filter standard log record attributes to find user-provided extras
+        extra_fields: Dict[str, Any] = {
+            k: v for k, v in record.__dict__.items()
+            if k not in {
+                'args', 'asctime', 'created', 'exc_info', 'exc_text', 'filename',
+                'funcName', 'levelname', 'levelno', 'lineno', 'module', 'msecs',
+                'message', 'msg', 'name', 'pathname', 'process', 'processName',
+                'relativeCreated', 'stack_info', 'thread', 'threadName'
+            }
+        }
+        if extra_fields:
+            return f"{msg} | Context: {extra_fields}"
+        return msg
+
+
 # Action mapping: exact values from Sinergym DEFAULT_5ZONE_DISCRETE_FUNCTION
-# (sinergym/utils/constants.py). The model was trained against these numbers.
-# ---------------------------------------------------------------------------
 ACTION_MAP: Dict[int, Tuple[float, float]] = {
     0: (12.0, 30.0),
     1: (13.0, 29.0),
@@ -36,27 +66,7 @@ ACTION_MAP: Dict[int, Tuple[float, float]] = {
     9: (21.0, 23.25),
 }
 
-# ---------------------------------------------------------------------------
 # VecNormalize statistics -- extracted from vec_normalize_discrete.pkl
-# Observation space order (Eplus-5zone-cool-discrete-v1):
-#   [0]  Month                                  <- datetime injected
-#   [1]  Day of Month                           <- datetime injected
-#   [2]  Hour                                   <- datetime injected
-#   [3]  Site Outdoor Air Drybulb Temperature   <- outdoor_temp injected
-#   [4]  Site Outdoor Air Relative Humidity
-#   [5]  Site Wind Speed
-#   [6]  Site Wind Direction
-#   [7]  Site Diffuse Solar Radiation
-#   [8]  Site Direct Solar Radiation
-#   [9]  Zone Thermostat Heating Setpoint (current)
-#   [10] Zone Thermostat Cooling Setpoint (current)
-#   [11] Zone Air Temperature                   <- indoor_temp injected
-#   [12] Zone Air Relative Humidity
-#   [13] Zone Thermal Comfort Fanger PMV
-#   [14] Zone People Occupant Count (near-zero variance)
-#   [15] Facility Total HVAC Electric Demand Power
-#   [16] Electricity:Facility (cumulative)
-# ---------------------------------------------------------------------------
 OBS_MEAN: np.ndarray = np.array(
     [6.51779457e+00, 1.57188284e+01, 1.14999977e+01, 9.26117130e+00,
      8.10594384e+01, 2.27252186e+00, 1.80487175e+02, 7.03206009e+01,
@@ -86,7 +96,7 @@ _shutdown: bool = False
 
 def _handle_signal(sig: int, frame: object) -> None:
     global _shutdown
-    print(f"\n[SYSTEM] Signal {sig} received -- shutting down after current cycle...")
+    logger.info("Signal %s received -- shutting down after current cycle...", sig)
     _shutdown = True
 
 
@@ -115,18 +125,26 @@ async def run_inference_loop(db: TelemetryDB) -> None:
     try:
         await bridge.initialize()
     except Exception as e:
-        print(f"[SYSTEM WARNING] BACnet pre-init failed (will retry on first write): {e}")
+        logger.warning("BACnet pre-init failed (will retry on first write): %s", e)
 
-    print("[AI] Loading ONNX Inference Session...")
-    ort_session: ort.InferenceSession = ort.InferenceSession('models/ecoretrofit_3M.onnx')
-    print("[AI] ONNX session ready. Entering inference loop.")
+    # Resolve ONNX model path relative to project root with env var support
+    default_model_path: Path = PROJECT_ROOT / 'src' / 'edge' / 'models' / 'ecoretrofit_3M.onnx'
+    model_path_str: str = os.environ.get('EDGE_MODEL_PATH', str(default_model_path))
+    model_path: Path = Path(model_path_str)
+
+    logger.info("Loading ONNX Inference Session from %s...", model_path)
+    if not model_path.exists():
+         raise FileNotFoundError(f"ONNX model file not found at {model_path}")
+         
+    ort_session: ort.InferenceSession = ort.InferenceSession(str(model_path))
+    logger.info("ONNX session ready. Entering inference loop.")
 
     cycle: int = 1
     async with httpx.AsyncClient(timeout=2.0) as http:
         while not _shutdown:
-            print(f"\n--- Inference Cycle {cycle} ---")
+            logger.info("Inference cycle start", extra={"cycle": cycle})
 
-            # 1. Parallel fetch: environment + override status in one RTT
+            # 1. Parallel fetch: environment + override status
             indoor_temp: float = 21.5
             outdoor_temp: float = 15.0
             override_active: bool = False
@@ -141,17 +159,20 @@ async def run_inference_loop(db: TelemetryDB) -> None:
                     env_data: Dict[str, float] = results[0].json()
                     indoor_temp = float(env_data.get("indoor_temp", 21.5))
                     outdoor_temp = float(env_data.get("outdoor_temp", 15.0))
+                elif isinstance(results[0], httpx.HTTPError) or isinstance(results[0], httpx.RequestError):
+                    logger.warning("Backend environment request failed: %s", results[0])
                 elif isinstance(results[0], Exception):
-                    print(f"[WARNING] Backend env unreachable: {results[0]}")
+                    logger.warning("Unexpected exception contacting backend environment: %s", results[0])
 
                 # Parse override response
                 if isinstance(results[1], httpx.Response) and results[1].is_success:
                     override_active = results[1].json().get("override_active", False)
                 elif isinstance(results[1], Exception):
-                    pass  # Fail open: allow BACnet writes if override check fails
+                    # Fail open: allow default flow if override check fails
+                    logger.warning("Override check failed, defaulting to active logic: %s", results[1])
 
             except Exception as e:
-                print(f"[WARNING] Backend unreachable, using fallback values: {e}")
+                logger.warning("Backend service unreachable, using fallback values: %s", e)
 
             # 2. Build normalized observation vector
             obs_array: np.ndarray = build_observation(indoor_temp, outdoor_temp)
@@ -164,11 +185,20 @@ async def run_inference_loop(db: TelemetryDB) -> None:
             action: int = int(onnx_outputs[0][0])
             heating_setpoint, cooling_setpoint = ACTION_MAP.get(action, (18.0, 24.0))
 
-            print(
-                f"[AI] Action {action} -> "
-                f"Heating: {heating_setpoint}C | Cooling: {cooling_setpoint}C "
-                f"(Indoor: {indoor_temp}C | Outdoor: {outdoor_temp}C) "
-                f"[{latency_ms:.2f}ms]"
+            logger.info(
+                "Inference complete: Action %s -> Heating: %sC, Cooling: %sC",
+                action,
+                heating_setpoint,
+                cooling_setpoint,
+                extra={
+                    "cycle": cycle,
+                    "action": action,
+                    "heating_setpoint": heating_setpoint,
+                    "cooling_setpoint": cooling_setpoint,
+                    "indoor_temp": indoor_temp,
+                    "outdoor_temp": outdoor_temp,
+                    "latency_ms": latency_ms
+                }
             )
 
             # 4. Log telemetry to InfluxDB (includes inference latency)
@@ -181,36 +211,45 @@ async def run_inference_loop(db: TelemetryDB) -> None:
 
             # 5. Broadcast setpoints to BACnet (skipped if override active)
             if override_active:
-                print("[SYSTEM] Manual override active -- skipping BACnet write.")
+                logger.info("Manual override active -- skipping BACnet write.")
             else:
                 try:
-                    print("[BACNET] Bridging parameters to physical hardware...")
+                    logger.info("Bridging parameters to physical hardware...")
                     await bridge.write_setpoint(
                         device_address=bacnet_device,
                         object_identifier=object_identifier,
                         value=heating_setpoint,
                     )
                 except AbortPDU as e:
-                    print(f"[NETWORK WARNING] BACnet Abort Exception Caught: {e}")
+                    logger.warning("BACnet Abort Exception Caught: %s", e, extra={"device": bacnet_device})
                 except Exception as e:
-                    print(f"[SYSTEM ERROR] Unexpected Bridge Exception: {e}")
+                    logger.error("Unexpected Bridge Exception: %s", e, exc_info=True)
 
-            print("[SYSTEM] Awaiting next environmental state...")
+            logger.info("Awaiting next environmental state...")
             cycle += 1
             await asyncio.sleep(2)
 
-    print("[SYSTEM] Inference loop exited cleanly.")
+    logger.info("Inference loop exited cleanly.")
 
 
 if __name__ == "__main__":
+    # Configure logging with custom StructuredFormatter
+    handler = logging.StreamHandler()
+    formatter = StructuredFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    handler.setFormatter(formatter)
+    
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(handler)
+
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
-    print("[SYSTEM] Booting Edge Control Inference Sequence...")
-    db = TelemetryDB()
+    logger.info("Booting Edge Control Inference Sequence...")
+    db: TelemetryDB = TelemetryDB()
     try:
         asyncio.run(run_inference_loop(db))
     finally:
-        print("[SYSTEM] Closing InfluxDB connection...")
+        logger.info("Closing InfluxDB connection...")
         db.close()
-        print("[SYSTEM] Shutdown complete.")
+        logger.info("Shutdown complete.")

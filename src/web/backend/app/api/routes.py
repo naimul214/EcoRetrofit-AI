@@ -3,22 +3,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.api.dependencies import get_influx_service, get_savings_service
+from app.api.dependencies import get_influx_service, get_savings_service, get_state_service
 from app.core.settings import Settings, get_settings
 from app.models.telemetry import HealthResponse, SavingsSummary, TelemetryPoint
 from app.services.influx_service import InfluxTelemetryService
 from app.services.savings_service import SavingsService
+from app.services.state_service import StateService
 
 router = APIRouter()
-
-# Global state memory for live simulator overlay.
-current_env: dict[str, float] = {
-    "indoor_temp": 21.5,
-    "outdoor_temp": 15.0,
-}
-
-# Manual override flag -- when True the inference loop skips BACnet writes.
-ai_override_active: bool = False
 
 RATE_CAD_PER_KWH: float = 0.15
 
@@ -86,19 +78,22 @@ def get_health(settings: Settings = Depends(get_settings)) -> HealthResponse:
 
 
 @router.post("/environment", tags=["control"])
-def update_environment(env: EnvironmentUpdate) -> dict[str, float]:
-    global current_env
-    current_env["indoor_temp"] = env.indoor_temp
-    current_env["outdoor_temp"] = env.outdoor_temp
-    return current_env
+def update_environment(
+    env: EnvironmentUpdate,
+    state_service: StateService = Depends(get_state_service),
+) -> dict[str, float]:
+    state_service.set_environment(env.indoor_temp, env.outdoor_temp)
+    return state_service.get_environment()
 
 
 @router.get("/environment", tags=["control"])
 def get_environment(
     influx_service: InfluxTelemetryService = Depends(get_influx_service),
+    state_service: StateService = Depends(get_state_service),
 ) -> dict[str, Any]:
-    indoor: float = current_env["indoor_temp"]
-    outdoor: float = current_env["outdoor_temp"]
+    env = state_service.get_environment()
+    indoor: float = env["indoor_temp"]
+    outdoor: float = env["outdoor_temp"]
     setpoints = _latest_setpoints_or_default(influx_service)
 
     return {
@@ -114,27 +109,33 @@ def get_environment(
 
 
 @router.post("/override", tags=["control"])
-def set_override(payload: OverrideUpdate) -> dict[str, bool]:
-    global ai_override_active
-    ai_override_active = payload.active
-    return {"override_active": ai_override_active}
+def set_override(
+    payload: OverrideUpdate,
+    state_service: StateService = Depends(get_state_service),
+) -> dict[str, bool]:
+    state_service.set_override(payload.active)
+    return {"override_active": state_service.get_override()}
 
 
 @router.get("/override", tags=["control"])
-def get_override() -> dict[str, bool]:
-    return {"override_active": ai_override_active}
+def get_override(
+    state_service: StateService = Depends(get_state_service),
+) -> dict[str, bool]:
+    return {"override_active": state_service.get_override()}
 
 
 @router.get("/energy/project", tags=["analytics"])
 def project_energy(
     settings: Settings = Depends(get_settings),
     influx_service: InfluxTelemetryService = Depends(get_influx_service),
+    state_service: StateService = Depends(get_state_service),
 ) -> dict[str, float]:
     setpoints = _latest_setpoints_or_default(influx_service)
     heating_set: float = setpoints["heating_setpoint"]
     cooling_set: float = setpoints["cooling_setpoint"]
-    indoor: float = current_env["indoor_temp"]
-    outdoor: float = current_env["outdoor_temp"]
+    env = state_service.get_environment()
+    indoor: float = env["indoor_temp"]
+    outdoor: float = env["outdoor_temp"]
 
     if indoor < heating_set or indoor > cooling_set:
         projected_kwh = settings.baseline_hvac_kw + (abs(outdoor - indoor) * 1.2)
@@ -190,12 +191,14 @@ def get_telemetry_window(
 def get_savings_summary(
     settings: Settings = Depends(get_settings),
     influx_service: InfluxTelemetryService = Depends(get_influx_service),
+    state_service: StateService = Depends(get_state_service),
 ) -> dict[str, float]:
     setpoints = _latest_setpoints_or_default(influx_service)
     heating_set: float = setpoints["heating_setpoint"]
     cooling_set: float = setpoints["cooling_setpoint"]
-    indoor: float = current_env["indoor_temp"]
-    outdoor: float = current_env["outdoor_temp"]
+    env = state_service.get_environment()
+    indoor: float = env["indoor_temp"]
+    outdoor: float = env["outdoor_temp"]
 
     baseline_kwh: float = settings.baseline_hvac_kw
     if indoor < heating_set or indoor > cooling_set:
