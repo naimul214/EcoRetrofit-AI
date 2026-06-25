@@ -24,26 +24,66 @@ Commercial buildings often run static HVAC schedules that waste energy during lo
 * Target edge hardware: Raspberry Pi 4
 
 ## Architecture And Workflow
-```
-Building Sensors / Simulated Environment
-->
-FastAPI Control API
-->
-Edge Inference Service (ONNX policy)
-->
-Action Mapping (heating/cooling setpoints)
-->
-BACnet Write to HVAC Controller
+
+The system is split into three main layers: the **Client/Dashboard Layer**, the **Server/Storage Layer**, and the **Edge/Control Layer**.
+
+```mermaid
+graph TB
+    %% Subgraphs for layering
+    subgraph Client ["User / Operator Interface"]
+        Dashboard["Next.js Frontend Dashboard"]
+    end
+
+    subgraph Backend ["Server / Storage Layer"]
+        API["FastAPI Control API"]
+        InfluxDB[("InfluxDB Time-Series DB")]
+    end
+
+    subgraph Edge ["Edge Layer (Raspberry Pi)"]
+        Inference["Edge Inference Loop<br>(local_inference.py)"]
+        ONNX["ONNX Runtime<br>(Optimal Policy)"]
+        LocalDB[("Local SQLite DB")]
+        BACnet["BACnet Bridge<br>(bacnet_translator.py)"]
+    end
+
+    subgraph Environment ["Physical / Simulated Zone"]
+        Controller["HVAC Controller<br>(BACnet IP/MSTP)"]
+        Sensors["Building Sensors<br>(Temp, Setpoints)"]
+    end
+
+    %% Workflow Connections
+    Dashboard -- "1. Read Telemetry / Insights" --> API
+    Dashboard -- "2. POST Manual Override" --> API
+    API -- "Query Metrics" --> InfluxDB
+    
+    Inference -- "3. Pull Env State & Override Settings" --> API
+    Inference -- "4. Run State Inference" --> ONNX
+    ONNX -- "Predicted HVAC Actions" --> Inference
+    Inference -- "5. Log State / Cache" --> LocalDB
+    Inference -- "6. Send Setpoints" --> BACnet
+    BACnet -- "7. Write Setpoint Registers" --> Controller
+    
+    Sensors -- "Temp / Humidity Telemetry" --> Controller
+    Inference -- "8. Publish Telemetry" --> InfluxDB
+
+    %% Styling and colors
+    classDef client fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#01579b;
+    classDef backend fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#1b5e20;
+    classDef edge fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#e65100;
+    classDef env fill:#eceff1,stroke:#37474f,stroke-width:2px,color:#37474f;
+
+    class Dashboard client;
+    class API,InfluxDB backend;
+    class Inference,ONNX,LocalDB,BACnet edge;
+    class Controller,Sensors env;
 ```
 
-Parallel telemetry path:
-```
-Edge Inference Service
-->
-InfluxDB
-->
-Dashboard (live charts, savings, override state)
-```
+### Core Workflows
+1. **Edge Control Loop (BACnet)**: The `local_inference.py` script executes at regular intervals on the Raspberry Pi edge device. It pulls the latest zone temperature, ambient weather overlay, and active manual override status from the **FastAPI Control API**.
+2. **AI Inference**: The edge script feeds normalized sensor data into the **ONNX Runtime** executing the trained reinforcement learning model. The model outputs HVAC setpoint shifts (e.g. heating/cooling Deadband shifts).
+3. **BACnet Command**: The edge script translates the predicted action and sends commands via the **BACnet Bridge** to the physical/simulated **HVAC Controller**.
+4. **Telemetry Logging**: The edge script writes telemetry points (actual/target temperatures, action selection, and system metrics) to **InfluxDB** and caches the state in a local SQLite DB for resilience.
+5. **Dashboard Monitoring**: The **Next.js Dashboard** fetches time-series telemetry and real-time savings statistics from the FastAPI API (which queries InfluxDB) and allows building managers to toggle manual controls.
 
 ## Quickstart (Local Machine)
 
