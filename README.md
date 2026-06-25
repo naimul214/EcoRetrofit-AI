@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🏢 EcoRetrofit AI
+#  EcoRetrofit AI
 
 ### AI-Driven Energy Optimization for Commercial Buildings
 
@@ -40,9 +40,9 @@ A live dashboard provides real-time visibility into the AI's decisions, energy s
 │                        Developer Workstation                        │
 │                                                                     │
 │  ┌──────────────┐    ┌──────────────┐    ┌───────────────────────┐  │
-│  │  Next.js 16   │◄──►│  FastAPI      │◄──►│  InfluxDB 2.7        │  │
-│  │  Dashboard    │    │  Backend      │    │  Telemetry Store     │  │
-│  │  :3000        │    │  :8010        │    │  :8086               │  │
+│  │  Next.js 16  │◄──►│  FastAPI     │◄──►│  InfluxDB 2.7         │  │
+│  │  Dashboard   │    │  Backend     │    │  Telemetry Store      │  │
+│  │  :3000       │    │  :8010       │    │  :8086                │  │
 │  └──────────────┘    └──────▲───────┘    └───────────▲───────────┘  │
 │                             │                        │              │
 └─────────────────────────────┼────────────────────────┼──────────────┘
@@ -52,16 +52,16 @@ A live dashboard provides real-time visibility into the AI's decisions, energy s
 │                   Raspberry Pi 4 (Edge Gateway)      │              │
 │                             │                        │              │
 │  ┌──────────────────────────┴────────────────────────┴───────────┐  │
-│  │                    local_inference.py                          │  │
-│  │  1. Fetch env state ──► 2. Normalize obs ──► 3. ONNX infer   │  │
+│  │                    local_inference.py                         │  │
+│  │  1. Fetch env state ──► 2. Normalize obs ──► 3. ONNX infer    │  │
 │  │  4. Log to InfluxDB ──► 5. Write BACnet setpoints             │  │
 │  └──────────────────────────┬────────────────────────────────────┘  │
 │                             │  BACnet/IP (UDP 47808)                │
 └─────────────────────────────┼───────────────────────────────────────┘
                               │
                     ┌─────────▼─────────┐
-                    │  HVAC Controller   │
-                    │  (BACnet Device)   │
+                    │  HVAC Controller  │
+                    │  (BACnet Device)  │
                     └───────────────────┘
 ```
 
@@ -72,7 +72,7 @@ A live dashboard provides real-time visibility into the AI's decisions, energy s
 ```
 EcoRetrofit-AI/
 ├── src/
-│   ├── edge/                        # 🔧 Edge inference (runs on Raspberry Pi)
+│   ├── edge/                        #    Edge inference (runs on Raspberry Pi)
 │   │   ├── local_inference.py       #    Main inference loop
 │   │   ├── bacnet_translator.py     #    BACnet write bridge
 │   │   ├── database.py              #    InfluxDB telemetry logger
@@ -84,22 +84,22 @@ EcoRetrofit-AI/
 │   │   └── .env.example             #    Environment variable template
 │   │
 │   ├── web/
-│   │   ├── backend/                 # 🖥️ FastAPI backend
+│   │   ├── backend/                 #    FastAPI backend
 │   │   │   ├── main.py              #    API server (env, telemetry, savings, override)
 │   │   │   ├── requirements.txt     #    Backend dependencies
 │   │   │   └── .env.example         #    Backend env template
 │   │   │
-│   │   └── frontend/               # 🎨 Next.js dashboard
+│   │   └── frontend/               #     Next.js dashboard
 │   │       └── src/app/
 │   │           ├── page.tsx         #    Dashboard (charts, controls, heartbeat)
 │   │           └── layout.tsx       #    Root layout with metadata
 │   │
-│   ├── training/                    # 🧠 Model training pipeline
+│   ├── training/                    #    Model training pipeline
 │   │   ├── train_ppo.py             #    PPO training with Sinergym
 │   │   ├── eval_ppo.py              #    Model evaluation loop
 │   │   └── export_onnx.py           #    ONNX export script
 │   │
-│   └── simulation/                  # 🏗️ Sinergym environment utilities
+│   └── simulation/                  #    Sinergym environment utilities
 │       ├── noise_wrapper.py         #    Sensor noise injection wrapper
 │       ├── rbc_agent.py             #    Rule-based baseline controller
 │       └── generate_massive_dataset.py  # Domain randomization data generator
