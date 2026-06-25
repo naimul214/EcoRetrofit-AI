@@ -1,8 +1,21 @@
+"""
+One-off verification script for the Sinergym environment with SensorNoiseWrapper.
+"""
+
+import sys
+from pathlib import Path
 import gymnasium as gym
 import sinergym
 from typing import Any, Dict
-from noise_wrapper import SensorNoiseWrapper
 import numpy as np
+
+# Resolve project root and ensure it is in sys.path
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.simulation.noise_wrapper import SensorNoiseWrapper
+
 
 def main() -> None:
     env_id: str = 'Eplus-5zone-hot-continuous-v1'
@@ -15,8 +28,7 @@ def main() -> None:
     noisy_env: gym.Env = SensorNoiseWrapper(base_env, noise_loc=0.0, noise_scale=0.5, target_index=11)
     
     try:
-        # Reset the environment (Using base environment for raw obs to compare)
-        # We need to manually reset the base_env and format the noise to demonstrate the difference properly
+        # Reset the environment
         print("Resetting environment...")
         
         # In a real run we step the noisy env, but for testing exactly the same step we will fetch raw obs then wrap
@@ -27,19 +39,19 @@ def main() -> None:
         print(f"Target Index (11) - Indoor Temperature [Raw]: {raw_obs[11]}")
         
         # Now pass the raw obs manually through the wrapper's observation logic to see exact transformation
-        wrapper_instance = noisy_env.unwrapped if hasattr(noisy_env, "unwrapped") else noisy_env
-        noisy_obs = noisy_env.observation(raw_obs) # type: ignore
+        noisy_obs: np.ndarray = noisy_env.observation(raw_obs)  # type: ignore
         
         print(f"\n[Noisy Observation] Size: {len(noisy_obs)}")
         print(f"Target Index (11) - Indoor Temperature [Noisy]: {noisy_obs[11]}")
         
-        variance = abs(noisy_obs[11] - raw_obs[11])
+        variance: float = abs(noisy_obs[11] - raw_obs[11])
         print(f"\nApplied Variance at Index 11: {variance:.4f}")
 
     finally:
         # Cleanly close the environment
         print("\nClosing the environment.")
         base_env.close()
+
 
 if __name__ == "__main__":
     main()

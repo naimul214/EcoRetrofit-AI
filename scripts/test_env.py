@@ -1,6 +1,11 @@
+"""
+One-off verification script for the base Sinergym environment setup.
+"""
+
 import gymnasium as gym
 import sinergym
-from typing import Any, Tuple, Dict
+from typing import Any, Dict
+
 
 def main() -> None:
     # Initialize the basic Sinergym environment
@@ -40,6 +45,7 @@ def main() -> None:
         # Cleanly close the environment
         print("Closing the environment.")
         env.close()
+
 
 if __name__ == "__main__":
     main()

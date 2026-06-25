@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     influx_token: str = Field(default="", validation_alias="INFLUXDB_ADMIN_TOKEN")
     influx_org: str = Field(default="ecoretrofit", validation_alias="INFLUXDB_ORG")
     influx_bucket: str = Field(default="ecoretrofit_telemetry", validation_alias="INFLUXDB_BUCKET")
+    state_db_path: str = Field(default="state.db", validation_alias="STATE_DB_PATH")
 
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -58,6 +59,13 @@ class Settings(BaseSettings):
                     parsed.append(normalized)
             return parsed
         raise ValueError("CORS_ORIGINS must be a list or comma-delimited string.")
+
+    @property
+    def resolved_state_db_path(self) -> Path:
+        path = Path(self.state_db_path)
+        if path.is_absolute():
+            return path
+        return _BACKEND_DIR / path
 
 
 @lru_cache
